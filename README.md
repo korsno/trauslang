@@ -1,4 +1,4 @@
-# Download the Traus script
+# Run this command to download
 wget https://raw.githubusercontent.com/korsno/trauslang/main/traus -O traus
 
 # Paste this in your terminal
