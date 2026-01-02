@@ -1,1 +1,328 @@
-Download the Traus 
+
+#!/data/data/com.termux/files/usr/bin/bash
+# TrausLang simplified, no color
+
+clear
+echo "████████████████"
+echo "████████████████"
+echo "      ████"
+echo "      ████"
+echo "      ████"
+echo "      ████"
+echo "      ████"
+echo "      ████"
+echo ""
+echo "Welcome to Traus!"
+echo "Today is $(date)"
+echo ""
+echo "TrausLang ready. Type 'help' for commands."
+
+declare -A variables
+declare -A functions
+
+# --- Helper Functions ---
+expand_vars() {
+    local txt="$1"
+    for var in "${!variables[@]}"; do
+        txt="${txt//\$$var/${variables[$var]}}"
+    done
+    echo "$txt"
+}
+
+math_eval() {
+    local var=$1 op=$2 val=$3
+    case $op in
+        add) variables[$var]=$(( ${variables[$var]:-0} + val ));;
+        sub) variables[$var]=$(( ${variables[$var]:-0} - val ));;
+        mul) variables[$var]=$(( ${variables[$var]:-0} * val ));;
+        div) 
+            if [[ $val -eq 0 ]]; then
+                echo "Error: Division by zero"
+                return 1
+            fi
+            variables[$var]=$(( ${variables[$var]:-0} / val ))
+            ;;
+        *) echo "Unknown math operation: $op";;
+    esac
+}
+
+eval_condition() {
+    local var=$1 op=$2 val=$3
+    local var_val="${variables[$var]}"
+    case $op in
+        "==") [[ "$var_val" == "$val" ]] && return 0 || return 1 ;;
+        "!=") [[ "$var_val" != "$val" ]] && return 0 || return 1 ;;
+        ">")  [[ "$var_val" -gt "$val" ]] 2>/dev/null && return 0 || return 1 ;;
+        "<")  [[ "$var_val" -lt "$val" ]] 2>/dev/null && return 0 || return 1 ;;
+        ">=") [[ "$var_val" -ge "$val" ]] 2>/dev/null && return 0 || return 1 ;;
+        "<=") [[ "$var_val" -le "$val" ]] 2>/dev/null && return 0 || return 1 ;;
+        *) echo "Unknown operator $op"; return 1 ;;
+    esac
+}
+
+execute_command() {
+    local input="$1"
+    [[ -z "$input" ]] && return
+    
+    # Handle 'exit' command first to break from main loop
+    [[ "$input" == "exit" ]] && return 99
+    
+    cmd=$(echo "$input" | awk '{print $1}')
+    args="${input#*$cmd}"
+    args="${args# }"  # Trim leading space
+
+    case $cmd in
+        show)
+            echo "$(expand_vars "$args")"
+            ;;
+        set)
+            var=$(echo $args | awk '{print $1}')
+            val="${args#*$var}"
+            val="${val# }"  # Trim leading space
+            variables[$var]="$val"
+            ;;
+        get)
+            var=$(echo $args | awk '{print $1}')
+            if [[ -n "${variables[$var]}" ]]; then
+                echo "${variables[$var]}"
+            else
+                echo "Variable $var not found."
+            fi
+            ;;
+        add|sub|mul|div)
+            var=$(echo $args | awk '{print $1}')
+            val=$(echo $args | awk '{print $2}')
+            math_eval $var $cmd $val
+            ;;
+        repeat)
+            n=$(echo $args | awk '{print $1}')
+            cmd_to_repeat="${args#*$n}"
+            cmd_to_repeat="${cmd_to_repeat# }"  # Trim leading space
+            # Remove surrounding quotes
+            cmd_to_repeat="${cmd_to_repeat%\"}"
+            cmd_to_repeat="${cmd_to_repeat#\"}"
+            for ((i=0;i<n;i++)); do
+                execute_command "$cmd_to_repeat"
+            done
+            ;;
+        if)
+            # Parse: if var op val then command
+            var=$(echo $args | awk '{print $1}')
+            op=$(echo $args | awk '{print $2}')
+            val=$(echo $args | awk '{print $3}')
+            # Extract everything after "then"
+            cond_command=$(echo "$args" | sed 's/.*then //')
+            if eval_condition "$var" "$op" "$val"; then
+                execute_command "$cond_command"
+            fi
+            ;;
+        func)
+            fname=$(echo $args | awk '{print $1}')
+            echo "Enter commands for function '$fname'. Type 'end' to finish."
+            block=()
+            while true; do
+                read -p "> " line
+                [[ "$line" == "end" ]] && break
+                block+=("$line")
+            done
+            functions[$fname]=$(IFS=';' ; echo "${block[*]}")
+            ;;
+        call)
+            fname=$(echo $args | awk '{print $1}')
+            if [[ -z "${functions[$fname]}" ]]; then
+                echo "Function $fname not found."
+            else
+                IFS=';' read -ra cmds <<< "${functions[$fname]}"
+                for c in "${cmds[@]}"; do
+                    execute_command "$c"
+                done
+            fi
+            ;;
+        help)
+            echo "TrausLang commands:"
+            echo "show <text>           -> print text"
+            echo "set <var> <val>       -> assign variable"
+            echo "get <var>             -> show variable"
+            echo "add/sub/mul/div <var> <val> -> math operations"
+            echo "repeat <n> <cmd>      -> repeat command n times"
+            echo "if <var> <op> <val> then <cmd> -> conditional execution"
+            echo "func <name>           -> define function"
+            echo "call <name>           -> call function"
+            echo "exit                  -> quit Traus"
+            echo "--- Extended commands ---"
+            echo "read <prompt> <var>"
+            echo "rand <var> <min> <max>"
+            echo "sleep <seconds>"
+            echo "concat <var1> <var2> <var3>"
+            echo "strlen <var>"
+            echo "upper <var>"
+            echo "lower <var>"
+            echo "reverse <var>"
+            echo "indexof <var> <substr>"
+            echo "substr <var> <start> <length>"
+            echo "append <var> <text>"
+            echo "prepend <var> <text>"
+            echo "exists <var>"
+            echo "delete <var>"
+            echo "time"
+            echo "date"
+            echo "menu <option1> <option2> ..."
+            echo "math <expr> <var>"
+            echo "listvars"
+            echo "listfuncs"
+            echo "contains <var> <text>"
+            echo "startswith <var> <text>"
+            echo "endswith <var> <text>"
+            echo "clear"
+            ;;
+        read)
+            prompt="${args% *}"
+            var="${args##* }"
+            read -p "$prompt " input_val
+            variables[$var]="$input_val"
+            ;;
+        clear)
+            clear
+            ;;
+        sleep)
+            sec=$(echo $args | awk '{print $1}')
+            sleep $sec
+            ;;
+        rand)
+            var=$(echo $args | awk '{print $1}')
+            min=$(echo $args | awk '{print $2}')
+            max=$(echo $args | awk '{print $3}')
+            variables[$var]=$(( RANDOM % (max - min + 1) + min ))
+            ;;
+        concat)
+            v1=$(echo $args | awk '{print $1}')
+            v2=$(echo $args | awk '{print $2}')
+            v3=$(echo $args | awk '{print $3}')
+            variables[$v1]="${variables[$v2]}${variables[$v3]}"
+            ;;
+        strlen)
+            var=$(echo $args | awk '{print $1}')
+            echo "${#variables[$var]}"
+            ;;
+        upper)
+            var=$(echo $args | awk '{print $1}')
+            variables[$var]=$(echo "${variables[$var]}" | tr '[:lower:]' '[:upper:]')
+            ;;
+        lower)
+            var=$(echo $args | awk '{print $1}')
+            variables[$var]=$(echo "${variables[$var]}" | tr '[:upper:]' '[:lower:]')
+            ;;
+        reverse)
+            var=$(echo $args | awk '{print $1}')
+            variables[$var]=$(echo "${variables[$var]}" | rev)
+            ;;
+        indexof)
+            var=$(echo $args | awk '{print $1}')
+            substr="${args#*$var}"
+            substr="${substr# }"
+            result="${variables[$var]%%$substr*}"
+            if [[ "${variables[$var]}" == *"$substr"* ]]; then
+                echo "${#result}"
+            else
+                echo "-1"
+            fi
+            ;;
+        substr)
+            var=$(echo $args | awk '{print $1}')
+            start=$(echo $args | awk '{print $2}')
+            length=$(echo $args | awk '{print $3}')
+            variables[$var]="${variables[$var]:$start:$length}"
+            ;;
+        append)
+            var=$(echo $args | awk '{print $1}')
+            text="${args#*$var}"
+            text="${text# }"
+            variables[$var]="${variables[$var]}$text"
+            ;;
+        prepend)
+            var=$(echo $args | awk '{print $1}')
+            text="${args#*$var}"
+            text="${text# }"
+            variables[$var]="$text${variables[$var]}"
+            ;;
+        exists)
+            var=$(echo $args | awk '{print $1}')
+            [[ -n "${variables[$var]}" ]] && echo "true" || echo "false"
+            ;;
+        delete)
+            var=$(echo $args | awk '{print $1}')
+            unset variables[$var]
+            ;;
+        time)
+            date +"%T"
+            ;;
+        date)
+            date +"%Y-%m-%d"
+            ;;
+        menu)
+            IFS=' ' read -ra options <<< "$args"
+            for i in "${!options[@]}"; do
+                echo "$((i+1))) ${options[$i]}"
+            done
+            read -p "Choose option: " choice
+            if [[ $choice -ge 1 ]] && [[ $choice -le ${#options[@]} ]]; then
+                echo "${options[$((choice-1))]}"
+            else
+                echo "Invalid choice"
+            fi
+            ;;
+        math)
+            expr_and_var="$args"
+            var=$(echo $expr_and_var | awk '{print $NF}')
+            expr="${expr_and_var% *}"
+            expr=$(expand_vars "$expr")
+            if command -v bc &> /dev/null; then
+                variables[$var]=$(echo "$expr" | bc 2>/dev/null)
+            else
+                variables[$var]=$(( $expr ))
+            fi
+            ;;
+        listvars)
+            if [[ ${#variables[@]} -eq 0 ]]; then
+                echo "No variables defined."
+            else
+                for k in "${!variables[@]}"; do echo "$k = ${variables[$k]}"; done
+            fi
+            ;;
+        listfuncs)
+            if [[ ${#functions[@]} -eq 0 ]]; then
+                echo "No functions defined."
+            else
+                for k in "${!functions[@]}"; do echo "$k"; done
+            fi
+            ;;
+        contains)
+            var=$(echo $args | awk '{print $1}')
+            txt="${args#*$var}"
+            txt="${txt# }"
+            [[ "${variables[$var]}" == *"$txt"* ]] && echo "true" || echo "false"
+            ;;
+        startswith)
+            var=$(echo $args | awk '{print $1}')
+            txt="${args#*$var}"
+            txt="${txt# }"
+            [[ "${variables[$var]}" == "$txt"* ]] && echo "true" || echo "false"
+            ;;
+        endswith)
+            var=$(echo $args | awk '{print $1}')
+            txt="${args#*$var}"
+            txt="${txt# }"
+            [[ "${variables[$var]}" == *"$txt" ]] && echo "true" || echo "false"
+            ;;
+        *)
+            echo "Unknown command: $cmd"
+            ;;
+    esac
+}
+
+# --- Main Loop ---
+while true; do
+    read -p "Traus> " input
+    execute_command "$input"
+    [[ $? -eq 99 ]] && echo "Exiting Traus..." && break
+done
