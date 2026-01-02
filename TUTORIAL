@@ -1,8 +1,0 @@
-Download the Traus script
-   Open your terminal and type
-
-
-wget https://raw.githubusercontent.com/korsno/trauslang/main/traus -O traus
-chmod +x traus
-traus
-
