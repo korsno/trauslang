@@ -1,8 +1,8 @@
-Download the Traus script
-   Open your terminal and type
+ Download the Traus script
+wget https://raw.githubusercontent.com/korsno/trauslang/main/traus -O traus
 
+ Make it executable
+chmod +x traus
 
-wget https://raw.githubusercontent.com/korsno/trauslang/refs/heads/main/traus -O traus
-then type chmod +x traus in your terminal
-lastly type traus
-
+ Run Traus
+traus
